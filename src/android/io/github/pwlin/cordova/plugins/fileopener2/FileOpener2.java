@@ -35,6 +35,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.net.Uri;
 import android.os.Build;
+import android.webkit.MimeTypeMap;
 
 import io.github.pwlin.cordova.plugins.fileopener2.FileProvider;
 
@@ -95,13 +96,17 @@ public class FileOpener2 extends CordovaPlugin {
 		try {
 			CordovaResourceApi resourceApi = webView.getResourceApi();
 			Uri fileUri = resourceApi.remapUri(Uri.parse(fileArg));
-			fileName = this.stripFileProtocol(fileUri.toString());
+			fileName = fileUri.getPath();
 		} catch (Exception e) {
 			fileName = fileArg;
 		}
 		File file = new File(fileName);
 		if (file.exists()) {
 			try {
+				if (contentType == null || contentType.trim().equals("")) {
+				    contentType = _getMimeType(fileName);
+				}
+
 				Intent intent;
 				if (contentType.equals("application/vnd.android.package-archive")) {
 					// https://stackoverflow.com/questions/9637629/can-we-install-an-apk-from-a-contentprovider/9672282#9672282
@@ -111,17 +116,17 @@ public class FileOpener2 extends CordovaPlugin {
 						path = Uri.fromFile(file);
 					} else {
 						Context context = cordova.getActivity().getApplicationContext();
-						path = FileProvider.getUriForFile(context, cordova.getActivity().getPackageName() + ".opener.provider", file);
+						path = FileProvider.getUriForFile(context, cordova.getActivity().getPackageName() + ".provider", file);
 					}
 					intent.setDataAndType(path, contentType);
-					intent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+					intent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
 
 				} else {
 					intent = new Intent(Intent.ACTION_VIEW);
 					Context context = cordova.getActivity().getApplicationContext();
-					Uri path = FileProvider.getUriForFile(context, cordova.getActivity().getPackageName() + ".opener.provider", file);
+					Uri path = FileProvider.getUriForFile(context, cordova.getActivity().getPackageName() + ".provider", file);
 					intent.setDataAndType(path, contentType);
-					intent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NO_HISTORY);
+					intent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_ACTIVITY_NO_HISTORY);
 
 				}
 
@@ -151,6 +156,18 @@ public class FileOpener2 extends CordovaPlugin {
 		}
 	}
 
+	private String _getMimeType(String url) {
+	    String mimeType = "*/*";
+	    int extensionIndex = url.lastIndexOf('.');
+	    if (extensionIndex > 0) {
+		String extMimeType = MimeTypeMap.getSingleton().getMimeTypeFromExtension(url.substring(extensionIndex+1));
+		if (extMimeType != null) {
+		    mimeType = extMimeType;
+		}
+	    }
+	    return mimeType;
+	}
+
 	private void _uninstall(String packageId, CallbackContext callbackContext) throws JSONException {
 		if (this._appIsInstalled(packageId)) {
 			Intent intent = new Intent(Intent.ACTION_UNINSTALL_PACKAGE);
@@ -178,13 +195,5 @@ public class FileOpener2 extends CordovaPlugin {
         return appInstalled;
 	}
 
-	private String stripFileProtocol(String uriString) {
-		if (uriString.startsWith("file://")) {
-			uriString = uriString.substring(7);
-		} else if (uriString.startsWith("content://")) {
-			uriString = uriString.substring(10);
-		}
-		return uriString;
-	}
-
 }
+
